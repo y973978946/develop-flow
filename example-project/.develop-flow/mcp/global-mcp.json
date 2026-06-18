@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "mcp__gitlab": {
+      "type": "gitlab",
+      "connection": {
+        "url": "https://gitlab.example.com",
+        "token": "glpat-xxxxxxxxxxxxxxxxxxxx",
+        "project_id": "12345"
+      },
+      "description": "GitLab 代码仓库"
+    }
+  }
+}

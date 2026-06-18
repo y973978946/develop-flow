@@ -1,0 +1,36 @@
+{
+  "mcpServers": {
+    "mcp__builder_sg_security__postgresql": {
+      "type": "postgresql",
+      "connection": {
+        "host": "localhost",
+        "port": "5432",
+        "database": "builder_db",
+        "username": "postgres",
+        "password": "password123"
+      },
+      "description": "Builder SG Security 项目数据库"
+    },
+    "mcp__builder_sg_security__redis": {
+      "type": "redis",
+      "connection": {
+        "host": "localhost",
+        "port": "6379",
+        "password": "",
+        "database": "0"
+      },
+      "description": "Builder SG Security 项目 Redis"
+    },
+    "mcp__builder_sg_security__rabbitmq": {
+      "type": "rabbitmq",
+      "connection": {
+        "host": "localhost",
+        "port": "5672",
+        "username": "guest",
+        "password": "guest",
+        "vhost": "/"
+      },
+      "description": "Builder SG Security 项目 RabbitMQ"
+    }
+  }
+}

@@ -1,0 +1,19 @@
+# 实际项目配置（含敏感信息）
+skills/develop-flow/project-config.md
+
+# 状态文件
+*.state.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# 临时文件
+*.tmp
+*.bak

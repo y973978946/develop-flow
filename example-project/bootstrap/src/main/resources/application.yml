@@ -1,0 +1,32 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: builder-sg-security
+  
+  datasource:
+    url: jdbc:postgresql://localhost:5432/builder_db
+    username: postgres
+    password: password123
+    driver-class-name: org.postgresql.Driver
+  
+  redis:
+    host: localhost
+    port: 6379
+    password:
+    database: 0
+  
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: guest
+    password: guest
+    virtual-host: /
+
+# 自定义配置
+app:
+  gitlab:
+    url: https://gitlab.example.com
+    token: ${GITLAB_TOKEN}
+    project-id: 12345

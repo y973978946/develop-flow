@@ -1,0 +1,29 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "postgresql": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-postgres", "postgresql://{env:POSTGRES_USER}:{env:POSTGRES_PASSWORD}@{env:POSTGRES_HOST}:{env:POSTGRES_PORT}"],
+      "enabled": true
+    },
+    "redis": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-redis", "redis://:{env:REDIS_PASSWORD}@{env:REDIS_HOST}:{env:REDIS_PORT}"],
+      "enabled": true
+    },
+    "rabbitmq": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-rabbitmq", "amqp://{env:RABBITMQ_USER}:{env:RABBITMQ_PASSWORD}@{env:RABBITMQ_HOST}:{env:RABBITMQ_PORT}/{env:RABBITMQ_VHOST}"],
+      "enabled": true
+    },
+    "gitlab": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-gitlab"],
+      "environment": {
+        "GITLAB_URL": "{env:GITLAB_URL}",
+        "GITLAB_TOKEN": "{env:GITLAB_TOKEN}"
+      },
+      "enabled": false
+    }
+  }
+}
