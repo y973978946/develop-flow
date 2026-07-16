@@ -1,8 +1,6 @@
-**English** | [中文](develop-flow-training.zh-CN.md)
-
 # Develop-Flow 培训指南
 
-> 纯后端全链路 Agent Team 开发工作流——从需求到代码就绪
+> 纯后端全链路 Agent Team 开发工作流 —— 从需求到代码提交
 
 ---
 
@@ -10,440 +8,405 @@
 
 ### 什么是 Develop-Flow？
 
-Develop-Flow 是一个 OpenCode Skill，自动化从需求到代码的完整后端开发工作流。通过 Hub-and-Spoke 模式协调多个 AI Agent，经过 6 个 Phase + 6 个 Gate：
+Develop-Flow 是一个 OpenCode Skill，协调多 Agent AI 团队处理纯后端开发生命周期。需求来源为飞书文档或文字描述（非 Jira），通过 Hub-and-Spoke 模式协调多个 AI Agent，以 **6 个 Phase + 6 个 Gate** 完成：
 
 ```
-需求输入 → 需求分析 → 架构设计 → 任务规划 → TDD 开发 → 代码评审 → 测试验证 → 代码就绪
+需求输入 → Phase 0 预检 → Phase 1 需求分析 → Phase 2 任务规划 → Phase 3 TDD 开发 → Phase 4 代码评审 → Phase 5 测试验证 → Phase 6 收尾 → 代码就绪（待 commit）
 ```
 
 ### 核心价值
 
-- **全链路自动化**: 从需求到代码，无需手动切换工具
-- **内置质量保证**: 6 个 Gate 检查点确保每步质量
-- **TDD 驱动**: 先写测试保证代码质量
-- **人机协作**: 半自动模式让用户掌控关键决策
-- **可恢复**: 断点恢复机制——中断后随时继续
+- **全链路自动化**：从需求到提交，无需手动切换工具
+- **文档驱动**：结构化 proposal/design，Gate 是完整性 checklist
+- **学习闭环**：自动积累经验，跨项目复用
+- **人机协作**：半自动模式下 Gate 由用户确认
+- **可恢复**：断点恢复，状态存 `.develop-flow/{task_id}-state.json`
 
 ### 两种运行模式
 
 | 特性 | 半自动（默认） | 全自动 |
-|------|---------------|--------|
-| Gate | 展示摘要 + 用户确认 | 自动通过，记录摘要 |
-| 异常 | 所有异常询问用户 | 仅超限询问用户 |
-| 适用场景 | 复杂需求、首次使用 | 简单需求、有经验用户 |
+|------|--------------|--------|
+| Gate | 展示 checklist 摘要 + 用户确认 | 自动放行，记录摘要 |
+| Phase 1 检查点 | 交互式 — 检查点 A/B 需用户确认 | 自动通过所有检查点 |
+| 异常 | 所有异常提示用户 | 仅重试耗尽时提示 |
+| 适用场景 | 复杂需求、首次使用 | 简单需求、熟悉流程后 |
 
 ---
 
-## 2. 架构深入
+## 2. 架构详解
 
 ### Hub-and-Spoke 模式
 
 ```
                     ┌──────────┐
-                    │   用户   │
+                    │   User   │
                     └────┬─────┘
-                         │ /develop-flow <需求>
+                         │ /develop-flow <需求描述>
                     ┌────▼─────┐
-                    │  Leader  │ ← 协调器（绝不执行操作）
+                    │  Leader  │ ← 编排器（只协调，不执行业务）
                     └────┬─────┘
-                         │ SendMessage
-              ┌──────────┼──────────┐
-         ┌────▼────┐ ┌──▼────┐ ┌──▼──────┐
-         │核心团队 │ │开发   │ │评审     │
-         │         │ │团队   │ │团队     │
-         └─────────┘ └───────┘ └─────────┘
+                         │ 触发子 skill（每阶段一个）
+         ┌──────────┬────┴────┬──────────┐
+     requirements  architect  planner  backend
+     -analyst                -developer
+         │            │          │          │
+       (spawn)     (spawn)    (spawn)    (spawn)
+         └────────────┴──────────┴──────────┘
+                         │ SendMessage（hub-spoke）
+                    各角色 Agent
 ```
 
-**关键原则**:
-- Leader **绝不直接执行**任何操作
-- Leader 只负责协调、决策和状态管理
-- 所有 Agent 间通信**必须经 Leader 路由**
-- Agent **严禁直接通信**
+**关键原则**：
+- Leader **永不直接执行**业务操作，只协调/决策/路由（保持上下文干净）
+- 所有 Agent 通信**必须经 Leader 路由**，严禁直连
+- **角色专长内嵌在 skill** —— develop-flow 不读 `~/.agents/agents/*.md`
 
-### 6 个 Agent 角色（核心）
+### 角色
 
-| Agent | 模型 | 创建时机 | 职责 |
-|-------|------|---------|------|
-| requirements-analyst | Opus | Phase 0 | 分析需求、生成 proposal |
-| architect | Opus | Phase 0 | 架构设计、生成 design.md |
-| planner | Opus | Phase 0 | 任务拆分、TDD 步骤规划 |
-| backend-developer | Sonnet | Gate 1 后 | 后端代码实现 |
-| code-reviewer | Sonnet | Phase 4 前 | 代码评审并分级 |
-| tester | Sonnet | Phase 5 前 | 测试验证、Bug 报告 |
+| 角色 | 职责 | Phase |
+|-------|------|-------|
+| requirements-analyst | 读需求、核心章节、澄清、总结 | 1, 6 |
+| architect | 工程章节、架构决策 | 1 |
+| planner | tasks.md 拆分 | 2 |
+| backend-developer | 建分支、实现、定稿 | 2, 3, 6 |
+| code-reviewer | 评审、严重性分级 | 4 |
+| tester | 测试验证、Bug 报告 | 5 |
 
-### 按需扩展策略
-
-并非所有 Agent 一开始就创建：
+### 按需 spawn
 
 ```
-Phase 0: 核心团队 (requirements-analyst + architect + planner)
-  ↓
-Gate 1: 确认设计涉及后端
-  ↓
-Gate 1 后: 创建 backend-developer
-  ↓
-Phase 4 前: 创建 code-reviewer
-  ↓
-Phase 5 前: 创建 tester
+Phase 0: Core team (requirements-analyst + architect + planner)
+Phase 1: requirements-analyst → architect
+Phase 2: planner → backend-developer
+Phase 3: backend-developer（TDD 开发）
+Phase 4: code-reviewer（代码评审）
+Phase 5: tester（测试验证）
+Phase 6: requirements-analyst（总结）+ backend-developer（定稿）
 ```
-
-**为什么？** 资源效率——按需创建，每个 Agent 有明确生命周期。
 
 ---
 
-## 3. Phase 详情
+## 3. Phase 详解
 
-### Phase 0: 初始化
+### Phase 0：预检 + 经验注入
 
-**发生什么**:
-1. 前置检查（依赖 skills、superpowers 插件、agent 定义）
-2. 解析需求来源（飞书文档/文字/图片）
-3. 加载配置
-4. 断点检测（检查未完成工作流）
-5. 选择运行模式（半自动/全自动）
-6. 创建核心团队
+**做什么**：
+1. 预检：依赖 skill（create-team / delete-team / learn）、superpowers 插件
+2. 解析输入（飞书文档 / 文字描述 / 图片）
+3. 加载配置（流程配置 → 项目配置）
+4. 断点检测（`.develop-flow/{task_id}-state.json` 存在则按 `resume.md` 恢复）
+5. 选运行模式
+6. **经验注入**：learn apply → 读 knowledge.md + playbook.md → 挑相关条目注入
 
-**产出**: 配置就绪 + 核心团队创建
+**产出**：配置就绪 + 经验已注入
 
 ---
 
-### Phase 1: 需求分析
+### Phase 1：需求分析（交互式）
 
-**参与者**: requirements-analyst → architect
+**参与者**：requirements-analyst → architect
 
-**流程**:
+**流程**：
 ```
 requirements-analyst:
-  1. 分析需求内容（飞书文档/文字描述）
-  2. 提出 2-3 个实现方案（含权衡分析）
-  3. 提供推荐方案及理由
-  4. 基线关联检查（如有 baseline_path）
-  5. Spec 自查（占位符、一致性、范围、歧义）
-  6. 产出: proposal.md
+  1. 读需求内容
+  2. 写需求理解摘要（≤10 句话）
+  3. 仅在歧义时问澄清（检查点 A）
+  4. 提出 2-3 个实现方案（检查点 B）
+  5. 生成 proposal.md
 
 architect:
-  1. Read proposal.md
-  2. 探索相关代码架构
-  3. 设计模块分解（单一职责、清晰接口）
-  4. 设计自查
-  5. 产出: design.md + 关键设计决策
+  1. 读 proposal + 探索相关代码
+  2. 生成 design.md
+  3. 关键架构决策（检查点 C）
 ```
 
-**产出**: `proposal.md` + `design.md`
+**产出**：`proposal.md` + `design.md`
 
-**Gate 1 通过标准**:
-- proposal.md + design.md 无占位符（TBD/TODO）
-- 内部一致（各部分无矛盾）
-- 受影响模块明确标识
+**Gate 1（checklist）**：
+- 核心章节存在且填写完整
+- 无 TBD/TODO 占位符
+- 每条验收标准有测试策略条目
+- 复杂需求架构决策非空
 
 ---
 
-### Phase 2: 任务规划
+### Phase 2：任务规划
 
-**参与者**: planner
+**参与者**：planner
 
-**流程**:
+**流程**：
 ```
 planner:
-  1. Read design.md
-  2. 拆分为小任务（每步 2-5 分钟）
-  3. 每个任务包含 TDD 步骤:
-     RED(写失败测试) → Verify RED → GREEN(最小实现) → Verify GREEN → REFACTOR
-  4. 创建 tasks.md + TaskCreate 跟踪条目
-  5. 标记 blockedBy 依赖
+  1. 读 proposal + design
+  2. 拆 tasks.md，每个单元带 TDD 步骤
+  3. 标注 blockedBy 依赖
 ```
 
-**产出**: `tasks.md`
+**产出**：`tasks.md`
 
-**Gate 2 通过标准**:
-- tasks.md 无占位符
-- 每步有文件路径和命令
-- blockedBy 依赖正确
+**Gate 2**：任务列表完整 + 无占位符
 
 ---
 
-### Phase 3: TDD 开发
+### Phase 3：TDD 开发
 
-**参与者**: backend-developer
+**参与者**：backend-developer
 
-**核心原则——TDD 纪律**:
-> 绝不在没有失败测试的情况下写生产代码。先写测试——永远！
-
-**流程**:
+**流程**：
 ```
-对每个任务:
-  1. RED:    写最小测试描述预期行为
-  2. Verify: 运行并确认失败（缺失功能，非语法错误）
-  3. GREEN:  写最少代码让测试通过
-  4. Verify: 运行并确认通过，无其他测试回归
-  5. REFACTOR: 清理（去重、改善命名、提取辅助函数）
+backend-developer:
+  1. 按 tasks.md 逐一执行
+  2. TDD 纪律：RED → 验证 → GREEN → 验证 → REFACTOR
+  3. 写新代码前搜索代码库复用
+  4. 如被阻塞 → SendMessage 给 Leader
 ```
 
-**产出**: 实现代码 + 测试代码
+**产出**：实现代码 + 测试代码
 
-**Gate 3 通过标准**:
-- 所有任务状态为 completed
-- 测试通过
+**Gate 3**：所有任务完成 + 测试通过
 
 ---
 
-### Phase 4: 代码评审
+### Phase 4：代码评审
 
-**参与者**: code-reviewer
+**参与者**：code-reviewer
 
-**流程**:
+**流程**：
 ```
 code-reviewer:
-  1. git diff 结构化评审（不依赖记忆）
-  2. 严重性分级:
-     CRITICAL: 安全漏洞 / 数据丢失风险 → 阻断合并
-     HIGH: Bug 或重大质量问题 → 修复后合并
-     MEDIUM: 可维护性问题 → 建议修复
-     LOW: 风格或小建议 → 可选
-  3. 每个问题: 文件路径:行号 + 问题描述 + 修复建议
+  1. git diff 结构化评审（不凭记忆）
+  2. 严重性分级：CRITICAL(阻断)/HIGH(合并前必修)/MEDIUM(建议)/LOW(可选)
+  3. 每条：file:line + 描述 + 修复建议
 ```
 
-**产出**: 评审报告（按 C/H/M/L 分级）
+**产出**：评审报告
 
-**Gate 4 通过标准**:
-- 无 CRITICAL 问题
-- 无未解决 HIGH 问题
-- 如有 → 开发修复，code-reviewer 重评
+**Gate 4**：无 CRITICAL + 无未解决 HIGH
 
 ---
 
-### Phase 5: 测试验证
+### Phase 5：测试验证
 
-**参与者**: tester
+**参与者**：tester
 
-**核心原则——证据纪律**:
-> 任何完成声明必须有即时可验证的证据。不要说"应该能用了"！
-
-**流程**:
+**流程**：
 ```
 tester:
-  1. Read proposal.md + tasks.md
-  2. 运行测试套件（单元 + 集成）
-  3. 数据库验证（通过 MCP 查询）
-  4. 每项验证提供: 命令 + 输出摘要 + 退出码
-  5. Bug 报告: 复现步骤 + 预期 + 实际 + 证据
+  1. 跑单元/集成测试
+  2. 证据优先：命令 → 输出 → 退出码（禁止"应该能用"）
+  3. Bug 报告：复现 + 预期 + 实际 + 证据
 ```
 
-**Bug 修复循环**（全经 Leader 路由）:
-```
-tester 发现 Bug → Leader → Leader 判断归属 → 开发修复 → Leader → tester 复验
-→ 未通过 → 再来一轮（≤3 次）→ 仍失败 → Leader 询问用户
-```
+**产出**：测试报告
 
-**产出**: 测试报告
-
-**Gate 5 通过标准**:
-- 所有测试通过
-- 无未修复 Bug
+**Gate 5**：所有测试通过 + 无未修复 Bug
 
 ---
 
-### Phase 6: 收尾
+### Phase 6：收尾 + 学习沉淀
 
-**参与者**: requirements-analyst
+**参与者**：requirements-analyst + backend-developer
 
-**流程**:
+**流程**：
 ```
-1. 确认所有任务完成
-2. 代码变更已在工作目录（未 commit）
-3. 生成开发总结报告
-4. 清理团队
+requirements-analyst:
+  1. 生成开发总结报告
+
+backend-developer:
+  1. 跑全量测试
+  2. 清 debug 代码
+  3. 一个需求一个大 commit
+
+learn capture:
+  1. 扫描本次 run 的信号
+  2. 写入 lessons-*.jsonl
+  3. lessons_captured++
+
+清理:
+  1. 调用 /delete-team
 ```
 
-**产出**: 清理完成 + 总结报告
+**产出**：总结报告 + 学习信号
 
-**Gate 6 通过标准**:
-- 工作流完成
-- 状态已清理
+**Gate 6**：所有任务完成 + 测试通过 + 总结已生成 + 信号已记录
 
 ---
 
-## 4. 配置系统
+## 4. 学习闭环（Learn）
 
-### 两层配置架构
+### 三模式
+
+| 模式 | 触发 | 做什么 |
+|------|------|--------|
+| capture | Phase 6 结束后自动 | 把本次 run 信号写成一条 jsonl |
+| apply | Phase 0 自动 | 读 knowledge.md + playbook.md，挑相关条目注入 |
+| distill | `/develop-flow learn --upgrade`（或每 5 次 capture 后提醒） | 聚类信号 → 更新知识库 |
+
+### 信号类型
+
+| signal | 触发 | severity |
+|--------|------|----------|
+| `gate_fail` | 某 Gate 未通过、返工 | high |
+| `spec_delta` | 发生需求变更 | medium |
+| `retry_escalation` | 异常超重试上限升级用户 | high |
+| `user_correction` | 用户中途明确纠正 | medium |
+| `manual_note` | `/develop-flow learn <note>` | 由用户 |
+| `win` | 某事做得好 | low |
+
+### 知识库位置
+
+- `skills/develop-flow/playbook.md` — 全局经验（跨项目，自动成长）
+- `{project}/.develop-flow/knowledge.md` — 项目级经验
+- `{project}/.develop-flow/{task_id}/lessons-*.jsonl` — 原始信号
+
+### 手动命令
+
+```bash
+# 记录手动笔记
+/develop-flow learn 这个需求需要注意数据库索引性能
+
+# 提炼经验（累积 5 条后执行）
+/develop-flow learn --upgrade
+```
+
+---
+
+## 5. 配置体系
+
+### 两层配置
 
 ```
-Layer 1: 流程配置
-  ~/.agents/skills/develop-flow/project-config.md
-  → develop-flow 工作流设置（root_path、产出路径）
-
-Layer 2: 项目配置
-  {root_path}/.develop-flow/project-config.md
-  → 完整项目信息（技术栈、数据库、测试环境、构建命令）
+Layer 1: 流程配置    ~/.agents/skills/develop-flow/project-config.md
+Layer 2: 项目配置    {root_path}/.develop-flow/project-config.md
 ```
 
-### 查找链
-
-```
-develop-flow/project-config.md → root_path
-  → {root_path}/.develop-flow/project-config.md → 完整配置
-```
-
-### 关键配置字段
+### 关键配置项
 
 ```yaml
-# develop-flow/project-config.md
-root_path: ""                    # 项目根路径
+# 流程配置
+root_path: ""                          # 项目根目录
 openspec:
-  changes_path: "openspec/changes"   # 工作产出目录
-  baseline_path: "openspec/specs"    # 系统基线（可选）
+  changes_path: "openspec/changes"     # 需求产出目录
+  baseline_path: "openspec/specs"      # 基线文档目录
 
-# project-config.md
-tech_stack:
-  backend: "laravel"             # 后端技术栈
-  database: "mysql"              # 数据库
-databases:                       # 数据库连接
-  main: { mcp: "mcp__xxx__mysql_query" }
-test_environments:               # 测试环境
-  default: { url: "https://..." }
-build_commands:                  # 构建命令
-  backend: "php artisan"
-migration:                       # 迁移命令
-  steps: ["php artisan migrate --force"]
+# 项目配置
+root_path: "D:\project\AA-SAAS\builder-labor"
+tech_stack: { backend: "java/spring", database: "postgresql" }
+modules:
+  - { name: "module-a", desc: "模块 A", path: "..." }
+git:
+  main_branch: "master"
+build_commands:
+  full_build: "mvn clean install -DskipTests=true"
+migration:
+  type: "flyway"
+databases:
+  main: { mcp: "mcp__xxx__query", desc: "主数据库" }
+test_environments:
+  default: { url: "...", account: "...", password: "..." }
 ```
 
 ---
 
-## 5. Superpowers 集成
+## 6. Obsidian 集成
 
-每个 Phase 引用一个 Superpowers 方法论技能。Agent 在运行时读取对应的 SKILL.md 获取完整方法论。
+### 架构
 
-| Phase | Superpowers 技能 | 核心约束 |
-|-------|-----------------|---------|
-| 1 需求分析 | brainstorming | 2-3 方案 + 权衡 + 自查 |
-| 2 任务规划 | writing-plans | 小粒度 + TDD 步骤 + 零占位符 |
-| 3 TDD 开发 | TDD + executing-plans | RED→Verify→GREEN→Verify→REFACTOR |
-| 4 代码评审 | requesting-code-review | git diff + 严重性分级 |
-| 5 测试验证 | verification | 证据纪律: 命令→输出→结论 |
-| 6 收尾 | finishing-a-branch | 全量测试 → 清理 |
-| 异常处理 | systematic-debugging | 先复现 → 根因 → 最小修复 |
+```
+develop-flow learn
+    ↓ distill
+playbook.md（全局经验）
+    ↓ sync-playbook-to-obsidian.sh
+Obsidian Vault（长期知识库）
+    ↓ RAG（Copilot 插件）
+下次 run 自动注入
+```
+
+### 配置步骤
+
+```bash
+# 1. 设置 Obsidian 路径
+export OBSIDIAN_VAULT="D:/your-obsidian-vault"
+
+# 2. 创建目录
+mkdir -p "$OBSIDIAN_VAULT/AI知识库"
+
+# 3. 同步 playbook 到 Obsidian
+bash ~/.agents/skills/develop-flow/obsidian/sync-playbook-to-obsidian.sh
+
+# 4. 从 Obsidian 同步回 playbook（可选）
+bash ~/.agents/skills/develop-flow/obsidian/sync-obsidian-to-playbook.sh
+```
 
 ---
 
-## 6. 异常处理
+## 7. 异常处理
 
-### 统一重试限制
+### 统一重试上限
 
-| 异常类型 | 自修复限制 | 超限动作 |
-|---------|-----------|---------|
-| 构建失败 | 开发 ≤2 次 | Leader 询问用户 |
-| 测试 Bug | 循环 ≤3 次 | Leader 询问用户 |
-| 需求/设计问题 | 重新 Gate ≤2 次 | Leader 询问是否终止 |
-| 任务冲突 | planner 重排 ≤1 次 | Leader 串行化 |
-| Agent 无响应 | 重发 1 次 | Leader 询问用户 |
-| Agent 上下文耗尽 | 替换 1 次 | Leader 询问用户 |
-
-### 超时检测
-
-- Phase 1-2: Agent 5 分钟未响应 → Leader 发送 ping
-- Phase 3-5: Agent 10 分钟未响应 → Leader 发送 ping
-- ping 未回复 → Leader 询问用户: 等待 / 跳过 / 终止
-
----
-
-## 7. 文件结构
-
-```
-~/.agents/skills/
-├── develop-flow/
-│   ├── skill.md                    ← 工作流骨架
-│   ├── gate.md                     ← Gate 机制
-│   ├── phases/                     ← Phase 指令（按需加载）
-│   │   ├── phase-1-brief.md
-│   │   ├── phase-2-brief.md
-│   │   ├── phase-3-brief.md
-│   │   ├── phase-4-brief.md
-│   │   ├── phase-5-brief.md
-│   │   └── phase-6-brief.md
-│   ├── project-config.md           ← 流程配置
-│   ├── project-config.example.md   ← 配置模板
-│   ├── team-rules.md               ← 团队通信规则
-│   └── resume.md                   ← 断点恢复逻辑
-├── create-team/                    ← 团队创建
-├── delete-team/                    ← 团队清理
-└── init-flow/                      ← 一键初始化
-
-~/.agents/agents/                   ← 15 个 Agent 定义
-├── requirements-analyst.md
-├── architect.md
-├── planner.md
-├── backend-developer.md
-├── code-reviewer.md
-├── tester.md
-├── build-error-resolver.md
-├── code-explorer.md
-├── code-simplifier.md
-├── database-reviewer.md
-├── performance-optimizer.md
-├── security-reviewer.md
-├── doc-updater.md
-├── refactor-cleaner.md
-└── tdd-guide.md
-```
-
-**懒加载设计**: Leader 只在进入对应 Phase 时才 Read phase-N-brief.md，最小化上下文占用。
+| 异常 | 自修复上限 | 超限 |
+|------|----------|------|
+| 构建失败 | 2 次重试 | 问用户 |
+| 测试 bug 循环 | 3 次循环 | 问用户 |
+| 需求/设计修订 | 2 次重新 Gate | 问是否终止 |
+| Agent 无响应 | 1 次 ping | 问用户 |
+| 上下文耗尽 | 1 次替换 | 问用户 |
 
 ---
 
 ## 8. 快速开始
 
-### 1. 安装依赖
+### 1. 前置
+- OpenCode CLI + superpowers 插件 (v5.0+)
+- skills：create-team、delete-team、learn
+- agents：requirements-analyst、architect、planner、backend-developer、code-reviewer、tester
 
-确保以下就绪:
-- OpenCode CLI
-- superpowers 插件 (v5.0+)
-- 依赖 skills: create-team, delete-team, init-flow
-- Agent 定义: 15 个 agents 在 `~/.agents/agents/`
+### 2. 安装
+```bash
+chmod +x install.sh && ./install.sh
+```
 
-### 2. 初始化
-
+### 3. 初始化
 ```
 /init-flow
 ```
 
-一键设置: 自动检测技术栈、生成配置、验证依赖。
-
-### 3. 运行
-
+### 4. 运行
 ```
-/develop-flow 用户认证模块需要支持 JWT 和 refresh token
+/develop-flow 用户认证模块需要 JWT 和 refresh token 支持
 ```
 
-或提供飞书文档内容:
-```
-/develop-flow 以下是飞书文档的需求内容：...
-```
-
-### 4. 交互
-
-半自动模式下，每个 Gate 展示摘要并等待确认:
-- 确认 → 继续下一 Phase
-- 修改 → Leader 转发修改指令
-- 终止 → 清理团队，工作流结束
+### 5. 交互
+半自动模式下每个 Gate 展示 checklist 摘要：确认 → 下一 Phase；修改 → Leader 转发；终止 → `/delete-team`。
 
 ---
 
 ## 9. FAQ
 
-**Q: 为什么 Leader 不能直接执行操作？**
-A: 关注点分离。Leader 只负责协调和决策；所有执行由专业 Agent 完成。确保职责清晰和操作可审计。
+**Q：Leader 为什么不能直接执行？**
+A：保持上下文干净。Leader 只协调/决策/路由，执行交给 agent。这保证职责清晰、可审计，且复杂需求不会撑爆 Leader 上下文。
 
-**Q: Agent 间任务冲突怎么办？**
-A: Leader 检测冲突并使用 worktree 隔离（为每个 Agent 创建独立工作树）避免文件冲突。
+**Q：子 skill 能单独用吗？**
+A：能。learn 可以独立调用：`/develop-flow learn <note>` 记录笔记，`/develop-flow learn --upgrade` 提炼经验。
 
-**Q: 可以中途暂停吗？**
-A: 可以。develop-flow 支持断点恢复。状态保存在 `{root_path}/.develop-flow/{task_id}-state.json`。重新运行会自动恢复。
+**Q：开发中发现需求错了怎么办？**
+A：触发需求变更——先改 proposal/design/tasks.md，再改代码。文档与代码始终同步。
 
-**Q: 全自动模式安全吗？**
-A: 全自动模式下，CRITICAL 和 HIGH 问题仍会升级给用户。Gate 质量检查仍执行——只是跳过手动确认。超限重试也会升级给用户。
+**Q：可以中途暂停吗？**
+A：可以。状态存 `.develop-flow/{task_id}-state.json`，下次自动恢复。
 
-**Q: 如何为新项目配置 develop-flow？**
-A: 运行 `/init-flow` 一键自动检测技术栈、生成配置。也可以手动创建 `project-config.md`（参考 `project-config.example.md`）。
+**Q：全自动模式安全吗？**
+A：CRITICAL/HIGH 仍升级用户；Gate 质量检查照跑，只跳过人工确认；超重试上限也升级用户。
 
-**Q: Superpowers 技能如何工作？**
-A: 每个 Phase 引用特定的 superpowers 技能。当 Agent 收到 `[superpowers:xxx]` 标记时，先 Read 对应 SKILL.md 获取完整方法论，然后遵循那些原则。
+**Q：TDD 是强制的吗？**
+A：是的。Phase 3 强制 TDD 纪律：RED → 验证 → GREEN → 验证 → REFACTOR。
+
+**Q：develop-flow 怎么"自我学习"？**
+A：learn 子 skill 闭环——每次 run 结束 capture 记信号；distill 把稳定的沉淀进 knowledge.md 和 playbook.md；下次 run apply 把相关经验注入。手动 `/develop-flow learn <note>` 随时教一条；`/develop-flow learn --upgrade` 触发提炼。
+
+**Q：代码风格/质量怎么保证？**
+A：① agent 主动调用已装工具；② Phase 4 代码评审分级；③ Phase 5 测试验证证据优先。
+
+**Q：什么时候 commit？**
+A：开发期不 commit（改动累积工作树），Phase 6 时**一个需求一个大 commit**（中文 message）。

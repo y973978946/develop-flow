@@ -32,6 +32,75 @@ remove_target() {
     fi
 }
 
+# --- ripgrep PATH 修复 ---
+
+# ripgrep 常见安装目录
+RIPGREP_DIRS=(
+    "$HOME/.local/bin"
+    "$HOME/.local/share/opencode/bin"
+    "/c/Users/admin/.local/bin"
+)
+
+fix_ripgrep_path() {
+    # 检查 rg 是否已在 PATH 中
+    if command -v rg &>/dev/null; then
+        info "ripgrep 已在 PATH 中: $(command -v rg)"
+        return 0
+    fi
+
+    # 搜索 ripgrep 安装目录
+    for dir in "${RIPGREP_DIRS[@]}"; do
+        if [ -f "$dir/rg.exe" ] || [ -f "$dir/rg" ]; then
+            # 检查是否已在 PATH 中
+            if echo "$PATH" | grep -q "$dir"; then
+                info "ripgrep 目录已在 PATH 中: $dir"
+                return 0
+            fi
+
+            # 添加到 PATH
+            export PATH="$PATH:$dir"
+            info "已添加 ripgrep 目录到 PATH: $dir"
+
+            # 永久写入 shell 配置
+            local shell_config=""
+            if [ -f "$HOME/.bashrc" ]; then
+                shell_config="$HOME/.bashrc"
+            elif [ -f "$HOME/.bash_profile" ]; then
+                shell_config="$HOME/.bash_profile"
+            elif [ -f "$HOME/.zshrc" ]; then
+                shell_config="$HOME/.zshrc"
+            fi
+
+            if [ -n "$shell_config" ]; then
+                if ! grep -q "$dir" "$shell_config" 2>/dev/null; then
+                    echo "export PATH=\"\$PATH:$dir\"" >> "$shell_config"
+                    info "已写入 $shell_config"
+                fi
+            fi
+
+            # Windows 系统永久写入
+            if [ "$IS_WINDOWS" = true ]; then
+                # 使用 setx 永久写入用户 PATH
+                if command -v setx &>/dev/null; then
+                    local win_dir=$(cygpath -w "$dir" 2>/dev/null || echo "$dir")
+                    local current_path=$(reg query "HKCU\Environment" //v Path 2>/dev/null | grep Path | awk '{print $3}')
+                    if [ -n "$current_path" ] && ! echo "$current_path" | grep -qi "$win_dir"; then
+                        setx PATH "$current_path$win_dir;" 2>/dev/null && info "已永久添加到 Windows 用户 PATH" || warn "setx 失败，请手动添加: $win_dir"
+                    fi
+                fi
+            fi
+
+            return 0
+        fi
+    done
+
+    warn "未找到 ripgrep 安装目录"
+    warn "请手动安装 ripgrep 或添加到 PATH"
+    return 1
+}
+
+fix_ripgrep_path
+
 # --- 前置检查 ---
 
 if [ ! -d "$OPENCODE_DIR" ]; then
@@ -108,6 +177,21 @@ for agent_file in "$SCRIPT_DIR/agents"/*.md; do
 done
 
 info "已安装 $AGENT_COUNT 个 agents"
+
+# --- 同步 Obsidian 集成脚本 ---
+
+OBSIDIAN_DIR="$SKILLS_DIR/develop-flow/obsidian"
+if [ -d "$SCRIPT_DIR/skills/develop-flow/obsidian" ]; then
+    mkdir -p "$OBSIDIAN_DIR"
+    for script in "$SCRIPT_DIR/skills/develop-flow/obsidian"/*; do
+        [ -f "$script" ] || continue
+        name=$(basename "$script")
+        target="$OBSIDIAN_DIR/$name"
+        cp "$script" "$target"
+        chmod +x "$target" 2>/dev/null || true
+    done
+    info "已同步 Obsidian 集成脚本到 $OBSIDIAN_DIR/"
+fi
 
 # --- 总结 ---
 

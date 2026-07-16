@@ -5,7 +5,7 @@
 set -e
 
 ENV_FILE="${1:-D:/project/178-builder.env}"
-OPENCODE_CONFIG="$HOME/.config/opencode/opencode.json"
+OPENCODE_CONFIG="$HOME/.config/opencode/opencode.jsonc"
 
 echo "=== OpenCode MCP 自动配置 ==="
 echo "环境变量文件: $ENV_FILE"

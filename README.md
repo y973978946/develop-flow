@@ -9,15 +9,50 @@ Requirements come from Feishu documents or text descriptions (not Jira), for pur
 ```
 Requirements Input → 6 Phases + 6 Gates → Code Ready (to commit)
 
+Phase 0: Pre-check   → Dependency check + Learn apply (experience injection)
 Phase 1: Requirements Analysis → proposal.md + design.md
 Phase 2: Task Planning         → tasks.md
 Phase 3: TDD Development       → Implementation Code
 Phase 4: Code Review           → Structured Review Report
 Phase 5: Test Verification     → Evidence-based Test Report
-Phase 6: Wrap-up               → Cleanup + Summary
+Phase 6: Wrap-up               → Cleanup + Summary + Learn capture
 ```
 
 Each Phase ends with a **Gate** — Leader summarizes Phase output for confirmation before continuing. Two modes: **Semi-automatic** (default, you confirm each Gate) or **Fully automatic** (Gates auto-pass, only pause on exceptions).
+
+## Learning Loop (Learn)
+
+develop-flow has a built-in learning mechanism that **automatically accumulates experience and reuses it across projects**:
+
+```
+Each run ends → Auto capture signals → Distill experience → Auto inject next time
+```
+
+### How It Works
+
+| Stage | Auto/Manual | Description |
+|-------|-------------|-------------|
+| **capture** | ✅ Auto | After Phase 6 ends, automatically records signals from this run (Gate failures, user corrections, etc.) |
+| **apply** | ✅ Auto | At Phase 0 start, automatically reads historical experience and injects into current task |
+| **distill** | ⚠️ Semi-auto | Reminds after 5 signals accumulated, executes clustering → update knowledge base |
+
+### Knowledge Base Location
+
+| File | Location | Description |
+|------|----------|-------------|
+| `playbook.md` | `~/.agents/skills/develop-flow/` | Global experience (cross-project, auto-grows) |
+| `knowledge.md` | `{project}/.develop-flow/` | Project-level experience (project-specific) |
+| `lessons-*.jsonl` | `{project}/.develop-flow/{task_id}/` | Raw signals (one file per run) |
+
+### Manual Commands
+
+```bash
+# Record manual note
+/develop-flow learn This requirement needs database index optimization
+
+# Distill experience (execute after 5+ signals)
+/develop-flow learn --upgrade
+```
 
 ## Architecture
 
@@ -163,6 +198,29 @@ Leader presents summary at each Gate. Semi-automatic mode (default) continues af
 ~/.config/opencode/env.sh                           ← Environment variables (Linux/Mac)
 ```
 
+### project-config.md Configuration Details
+
+**Configuration Layers**:
+- `~/.agents/skills/develop-flow/project-config.md` — Flow config (one per machine)
+- `{root_path}/.develop-flow/project-config.md` — Project config (one per project)
+
+**Configuration Items**:
+
+| Config Item | Required | Phase Usage | Example |
+|-------------|----------|-------------|---------|
+| `root_path` | ✅ | Phase 0: Determine project root | `"D:\project\AA-SAAS\builder-labor"` |
+| `tech_stack` | ✅ | Phase 1: Understand tech stack, Phase 3: Select build commands | `{ backend: "java/spring", database: "postgresql" }` |
+| `modules` | ✅ | Phase 1: Understand module structure, Phase 2: Task breakdown | See example below |
+| `git.main_branch` | ✅ | Phase 6: Wrap-up | `"master"` |
+| `openspec.changes_path` | ✅ | All Phases: Output directory | `"openspec/changes"` |
+| `openspec.baseline_path` | ⬜ | Phase 1: Baseline docs reference | `"openspec/specs"` |
+| `build_commands` | ⬜ | Phase 3: Build | `{ full_build: "mvn clean install" }` |
+| `migration` | ⬜ | Phase 3: Database migration | `{ type: "flyway", steps: [...] }` |
+| `databases` | ⬜ | Phase 1, 3: Database operations | `{ main: { mcp: "mcp__xxx__query" } }` |
+| `test_environments` | ⬜ | Phase 5: Testing | `{ default: { url: "...", account: "..." } }` |
+
+**Auto Detection**: Running `/init-flow` will auto-detect tech stack, repository structure, Git main branch, etc., and generate initial config.
+
 > See [docs/mcp-setup.md](docs/mcp-setup.md) for detailed MCP configuration.
 
 ## Directory Structure
@@ -194,6 +252,15 @@ develop-flow/
 │   │   │   ├── phase-4-brief.md     ← Code review
 │   │   │   ├── phase-5-brief.md     ← Test verification
 │   │   │   └── phase-6-brief.md     ← Wrap-up
+│   │   ├── learn/                   ← Learning loop sub-skill
+│   │   │   ├── SKILL.md             ← Learning loop definition
+│   │   │   ├── knowledge-format.md  ← Knowledge format
+│   │   │   └── distill-protocol.md  ← Distill protocol
+│   │   ├── obsidian/                ← Obsidian integration scripts
+│   │   │   ├── sync-playbook-to-obsidian.sh  ← playbook → Obsidian
+│   │   │   ├── sync-obsidian-to-playbook.sh  ← Obsidian → playbook
+│   │   │   └── OBSIDIAN-SETUP.md    ← Obsidian setup guide
+│   │   ├── playbook.md              ← Global experience (cross-project, auto-grows)
 │   │   ├── team-rules.md            ← Team communication rules
 │   │   ├── resume.md                ← Checkpoint recovery logic
 │   │   └── project-config.example.md ← Configuration template
@@ -230,6 +297,24 @@ All exceptions escalate to user when limits exceeded. No infinite retries.
 - **Checkpoint recovery** — State saved after each Phase, resume anytime
 
 ## FAQ
+
+### Obsidian Integration
+
+**Q: How to set up Obsidian integration?**
+
+A: Follow these steps:
+1. Set Obsidian vault path: `export OBSIDIAN_VAULT="D:/your-obsidian-vault"`
+2. Create directory: `mkdir -p "$OBSIDIAN_VAULT/AI知识库"`
+3. Sync playbook: `bash ~/.agents/skills/develop-flow/obsidian/sync-playbook-to-obsidian.sh`
+
+> See `~/.agents/skills/develop-flow/obsidian/OBSIDIAN-SETUP.md` for detailed guide.
+
+**Q: How to sync experience from Obsidian back to playbook?**
+
+A: Create a note at `$OBSIDIAN_VAULT/AI知识库/develop-flow-手动笔记.md`, then run:
+```bash
+bash ~/.agents/skills/develop-flow/obsidian/sync-obsidian-to-playbook.sh
+```
 
 ### MCP Related
 
