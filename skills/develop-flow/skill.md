@@ -151,13 +151,16 @@ dependencies:
 
 验证以下依赖就绪。汇总缺失项并提示用户安装/配置——不自动安装：
 
-1. 必需技能：`create-team`、`delete-team` 存在于 `~/.agents/skills/`
+1. 必需技能：`create-team`、`delete-team`、`learn` 存在于 `~/.agents/skills/`
 2. Superpowers 插件已安装（≥5.0.0）
 3. Agent 定义存在于 `~/.agents/agents/`：
    - requirements-analyst, architect, planner（核心团队）
    - backend-developer（开发团队）
    - code-reviewer, tester（评审/测试团队）
-4. 清理：`{changes_path}` 下的空目录。委派给首个可执行 Bash 的 Agent 运行 `find {changes_path} -type d -empty -delete`。
+4. **ripgrep 检测**：检查 `rg` 命令是否可用
+   - 如果不可用，运行 `python ~/.agents/skills/develop-flow/scripts/install_ripgrep.py` 自动安装
+   - 如果自动安装失败，提示用户手动安装
+5. 清理：`{changes_path}` 下的空目录。委派给首个可执行 Bash 的 Agent 运行 `find {changes_path} -type d -empty -delete`。
 → 全部就绪 → 继续
 
 ### 1. 解析 + 配置

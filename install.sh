@@ -38,7 +38,6 @@ remove_target() {
 RIPGREP_DIRS=(
     "$HOME/.local/bin"
     "$HOME/.local/share/opencode/bin"
-    "/c/Users/admin/.local/bin"
 )
 
 fix_ripgrep_path() {
@@ -110,9 +109,17 @@ if [ ! -d "$OPENCODE_DIR" ]; then
 fi
 info "OpenCode 目录: $OPENCODE_DIR"
 
-# 检查 superpowers 插件
-if [ ! -d "$SKILLS_DIR" ] || ! ls "$SKILLS_DIR"/superpowers* &>/dev/null 2>&1; then
-    warn "未在 $SKILLS_DIR/ 检测到 superpowers 插件"
+# 检查 superpowers 插件（检查具体技能是否存在）
+SUPERPOWERS_SKILLS="brainstorming writing-plans test-driven-development executing-plans requesting-code-review verification-before-completion finishing-a-development-branch systematic-debugging"
+MISSING_SKILLS=""
+for skill in $SUPERPOWERS_SKILLS; do
+    if [ ! -d "$SKILLS_DIR/$skill" ]; then
+        MISSING_SKILLS="$MISSING_SKILLS $skill"
+    fi
+done
+
+if [ -n "$MISSING_SKILLS" ]; then
+    warn "未检测到以下 superpowers 技能:$MISSING_SKILLS"
     warn "develop-flow 需要 superpowers >= 5.0.0。请在使用前安装。"
 fi
 
@@ -191,6 +198,35 @@ if [ -d "$SCRIPT_DIR/skills/develop-flow/obsidian" ]; then
         chmod +x "$target" 2>/dev/null || true
     done
     info "已同步 Obsidian 集成脚本到 $OBSIDIAN_DIR/"
+fi
+
+# --- 同步 scripts 目录 ---
+
+SCRIPTS_DIR="$SKILLS_DIR/develop-flow/scripts"
+if [ -d "$SCRIPT_DIR/scripts" ]; then
+    mkdir -p "$SCRIPTS_DIR"
+    for script in "$SCRIPT_DIR/scripts"/*; do
+        [ -f "$script" ] || continue
+        name=$(basename "$script")
+        target="$SCRIPTS_DIR/$name"
+        cp "$script" "$target"
+        chmod +x "$target" 2>/dev/null || true
+    done
+    info "已同步 scripts 到 $SCRIPTS_DIR/"
+fi
+
+# --- 同步 templates 目录 ---
+
+TEMPLATES_DIR="$SKILLS_DIR/develop-flow/templates"
+if [ -d "$SCRIPT_DIR/templates" ]; then
+    mkdir -p "$TEMPLATES_DIR"
+    for template in "$SCRIPT_DIR/templates"/*; do
+        [ -f "$template" ] || continue
+        name=$(basename "$template")
+        target="$TEMPLATES_DIR/$name"
+        cp "$template" "$target"
+    done
+    info "已同步 templates 到 $TEMPLATES_DIR/"
 fi
 
 # --- 总结 ---
